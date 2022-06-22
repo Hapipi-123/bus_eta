@@ -1,0 +1,169 @@
+#!/usr/bin/env python
+# coding: utf-8
+import numpy as np
+import pandas as pd 
+import xgboost as xgb
+import matplotlib.pyplot as plt
+import os 
+import gc 
+import datetime 
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("bus_station_eta_xgb") \
+    .config("hive.metastore.uris","thrift://hive-meta-marketth.hive.svc.datacloud.17usoft.com:9083") \
+    .config("hive.metastore.local", "false") \
+    .config("spark.io.compression.codec", "snappy") \
+    .config("spark.sql.execution.arrow.enabled", "false") \
+    .config('spark.executor.memory','20g')\
+    .config('spark.driver.memory','16g')\
+    .enableHiveSupport() \
+    .getOrCreate()
+
+
+
+#工作环境路径
+work_path = "/home/data_ming/bus/"
+#创建工作环境路径
+if not os.path.exists(work_path):
+    os.makedirs(work_path)
+    os.chdir(work_path)
+
+#训练数据所用字段名称
+dataset_column_names =['label',"nextstationid","direction","nextstationid_a","distance_m"
+    ,"gpsaccepttimeminute","gpsaccepttimehour","gpsaccepttimeofweek"
+    
+    ,"city_mappingid","line_mappingid","car_mappingid"
+    
+    ,"holidayindicator"
+    
+    ,"line_station_cnt","line_car_cnt","line_distance_sum","line_distance_max","line_distance_avg"
+    
+    ,"circle_line"
+    
+    ,"gpslatencyseconds"
+    
+    ,"clag1seconds","clag3seconds","clag5seconds"
+    ,"clag1distancem","clag3distancem","clag5distancem"
+    ,"clag1speed","clag3speed","clag5speed"
+    
+    ,"city_line_cnt","city_station_cnt","city_distance_sum","city_distance_max","city_distance_avg"
+    
+    ,"hour_car_gpsgeohash7_station_distance_max" ,"hour_car_gpsgeohash7_station_distance_avg","hour_car_gpsgeohash7_station_distance_min"
+    ,"hour_car_gpsgeohash7_station_seconds_max","hour_car_gpsgeohash7_station_seconds_avg","hour_car_gpsgeohash7_station_seconds_min"   
+    
+    ,"hour_car_gpsgeohash6_station_distance_max","hour_car_gpsgeohash6_station_distance_avg","hour_car_gpsgeohash6_station_distance_min"        
+    ,"hour_car_gpsgeohash6_station_seconds_max","hour_car_gpsgeohash6_station_seconds_avg" ,"hour_car_gpsgeohash6_station_seconds_min"
+    
+    ,"car_gpsgeohash7_station_distance_max","car_gpsgeohash7_station_distance_avg","car_gpsgeohash7_station_distance_min" 
+    ,"car_gpsgeohash7_station_seconds_max","car_gpsgeohash7_station_seconds_avg","car_gpsgeohash7_station_seconds_min"
+    
+    ,"car_gpsgeohash6_station_distance_max" ,"car_gpsgeohash6_station_distance_avg","car_gpsgeohash6_station_distance_min"
+    ,"car_gpsgeohash6_station_seconds_max","car_gpsgeohash6_station_seconds_avg","car_gpsgeohash6_station_seconds_min" 
+    
+    ,"geohash6_station_distance_max","geohash6_station_distance_avg","geohash6_station_distance_min"
+    ,"geohash6_station_seconds_max","geohash6_station_seconds_avg"  ,"geohash6_station_seconds_min"
+    
+    ,"geohash7_station_distance_max","geohash7_station_distance_avg","geohash7_station_distance_min"
+    ,"geohash7_station_seconds_max" ,"geohash7_station_seconds_avg","geohash7_station_seconds_min"
+    
+    ,"station_car_cnt","station_seconds_max","station_seconds_avg" ,"station_seconds_min"
+    
+    ,"week_station_car_cnt","week_station_seconds_max","week_station_seconds_avg" ,"week_station_seconds_min"
+    
+    ,'station_step_seconds_max'
+    ,'station_step_seconds_min'
+    ,'station_step_seconds_avg'
+              
+    ,"eta1","eta3","eta5"
+    
+    ,"nextstationcnt","clag1direction","clag3direction","clag5direction","clag1nextstationcnt","clag3nextstationcnt","clag5nextstationcnt"]
+
+data = [] 
+dataset_hdfs_paths = ['/ns-dcbi/tmp/tmp_ybl_bus_station_eta_train_dataset_2k_log']
+for hdfs in dataset_hdfs_paths:
+    os.system("hadoop fs -get {0} {1} ".format(hdfs,work_path))
+    os.system(" ls -la ")
+    dataset_train_local_path = work_path + hdfs.split('/')[-1]+"/"
+    for f in os.listdir(dataset_train_local_path):
+#         print(dataset_train_local_path+str(f))
+        dataset = pd.read_csv(dataset_train_local_path+str(f),sep='\001',names= dataset_column_names )
+# #         print(dataset.info(memory_usage='deep'))
+#         dataset_object = dataset.select_dtypes(include=['object'])
+#         dataset_object = dataset_object.astype('category')
+#         dataset_int = dataset.select_dtypes(include=['int'])
+#         dataset_int = dataset_int.apply(pd.to_numeric,downcast='signed')
+#         dataset_float = dataset.select_dtypes(include=['float'])
+#         dataset_float = dataset_float.apply(pd.to_numeric,downcast='float') 
+#         converted_dataset = pd.concat([dataset_int,dataset_float,dataset_object],axis = 1)
+# #         print(converted_dataset.info(memory_usage='deep'))
+#         data.append(converted_dataset) 
+#         del dataset,dataset_int,dataset_float,dataset_object,converted_dataset
+#         gc.collect()
+        data.append(dataset)
+
+#     os.system(" rm -rf {0} ".format(dataset_train_local_path))
+    
+# gc.collect()
+# data = pd.concat(data,ignore_index=True)
+
+
+print(data.shape)
+print(data.head(5))
+
+dfvalid = data.iloc[-5000:]
+dftest= data.iloc[-546:]
+data_train_1 = data.head(13840000)
+
+test_data.columns
+
+train_data = data_train_1.drop("label",axis = 1)
+train_y = data_train_1[["label"]]
+test_data = dftest.drop("label",axis = 1)
+test_y = dftest[["label"]]
+valid_data = dfvalid.drop("label",axis = 1)
+valid_y = dfvalid[["label"]]
+
+xgb_test= xgb.DMatrix(test_data,test_y)
+xgb_train = xgb.DMatrix(train_data,train_y)
+xgb_valid = xgb.DMatrix(valid_data,valid_y)
+
+num_boost_round = 3000           
+early_stopping_rounds = 10
+# 配置xgboost模型参数
+params_dict = dict()
+# booster参数
+params_dict['learning_rate'] = 0.001     # 学习率，通常越小越好。
+params_dict['objective'] = 'reg:squarederror'
+# tree参数
+params_dict['max_depth'] = 10            # 树的深度，通常取值在[3,10]之间
+params_dict['min_child_weight']= 2       # 最小叶子节点样本权重和，越大模型越保守。
+params_dict['gamma']= 0                   # 节点分裂所需的最小损失函数下降值，越大模型越保守。
+params_dict['subsample']= 0.9             # 横向采样，样本采样比例，通常取值在 [0.5，1]之间 
+params_dict['colsample_bytree'] = 0.85    # 纵向采样，特征采样比例，通常取值在 [0.5，1]之间 
+params_dict['tree_method'] = 'hist'       # 构建树的策略,可以是auto, exact, approx, hist
+# regulazation参数 
+# Omega(f) = gamma*T + reg_alpha* sum(abs(wj)) + reg_lambda* sum(wj**2)  
+params_dict['reg_alpha'] = 0.0            #L1 正则化项的权重系数，越大模型越保守，通常取值在[0,1]之间。
+params_dict['reg_lambda'] = 1.0           #L2 正则化项的权重系数，越大模型越保守，通常取值在[1,100]之间。
+# 其他参数
+params_dict['eval_metric'] = 'rmsle'
+#mae
+params_dict['seed'] = 1024
+
+result = {}
+watchlist = [(xgb_train, 'train'),(xgb_valid,'valid')] 
+bst = xgb.train(params = params_dict, dtrain = xgb_train, num_boost_round = num_boost_round, verbose_eval= 1,evals = watchlist,early_stopping_rounds=early_stopping_rounds,evals_result = result)
+
+y_pred_test = bst.predict(xgb_test, ntree_limit=bst.best_iteration)
+mape = sum(np.abs((np.array(dftest["label"].values))- y_pred_test.astype(int))/np.array(dftest["label"].values))/np.array(dftest["label"]).shape[0]
+n = 0
+bad_case=[]
+for i in range(np.array(dftest["label"]).shape[0]):
+    acc = np.abs(np.array(dftest["label"].values)[i] - (int(y_pred_test[i])))/np.array(dftest["label"].values)[i]
+    if acc<0.1:
+        n = n+1
+    else:
+        bad_case.append(acc)
+           
+acc = n/np.array(dftest["label"]).shape[0]
